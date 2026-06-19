@@ -11,3 +11,7 @@ wheels/
 
 # Environment
 .env
+
+# Cache
+.mypy_cache
+.ruff_cache

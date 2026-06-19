@@ -1,0 +1,40 @@
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: bash -c 'uv run --project backend ruff check --fix "$@"' --
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        entry: bash -c 'uv run --project backend ruff format "$@"' --
+        language: system
+        types_or: [python, pyi]
+
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && uv run mypy .'
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: django-tests
+        name: django tests
+        entry: bash -c 'cd backend && uv run python manage.py test --parallel'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
