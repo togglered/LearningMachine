@@ -15,13 +15,13 @@ repos:
     hooks:
       - id: ruff-check
         name: ruff check
-        entry: bash -c 'uv run --project backend ruff check --fix "$@"' --
+        entry: bash -c 'uv run --project backend ruff check --force-exclude --fix "$@"' --
         language: system
         types_or: [python, pyi]
 
       - id: ruff-format
         name: ruff format
-        entry: bash -c 'uv run --project backend ruff format "$@"' --
+        entry: bash -c 'uv run --project backend ruff format --force-exclude "$@"' --
         language: system
         types_or: [python, pyi]
 
