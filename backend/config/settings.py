@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 
+import django_stubs_ext
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,6 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
+
+django_stubs_ext.monkeypatch()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -44,6 +47,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.core",
     "apps.users",
+    "apps.content",
 ]
 
 AUTH_USER_MODEL = "users.User"
