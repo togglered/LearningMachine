@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+from django.core.exceptions import ValidationError
+
+from .models import Question
+
+
+class Grader(ABC):
+    """Validate content/answer_key and grade a response for one kind."""
+
+    auto_gradable: bool = True
+
+    @abstractmethod
+    def validate(self, content: dict[str, Any], answer_key: dict[str, Any]) -> None:
+        pass
+
+    @abstractmethod
+    def is_correct(self, answer_key: dict[str, Any], response: Any) -> bool:
+        pass
+
+
+_REGISTRY: dict[str, Grader] = {}
+G = TypeVar("G", bound=Grader)
+
+
+def register(kind: str) -> Callable[[type[G]], type[G]]:
+    def deco(cls: type[G]) -> type[G]:
+        _REGISTRY[str(kind)] = cls()
+        return cls
+
+    return deco
+
+
+def get_grader(kind: str) -> Grader | None:
+    return _REGISTRY.get(kind)
+
+
+def _option_ids(content: dict[str, Any]) -> set[str]:
+    options = content.get("options")
+    if not isinstance(options, list) or not options:
+        raise ValidationError("content.options must be a non-empty list.")
+    ids: list[str] = []
+    for opt in options:
+        if not isinstance(opt, dict) or "id" not in opt or "text" not in opt:
+            raise ValidationError("Each option must have an 'id' and 'text'.")
+        ids.append(str(opt["id"]))
+    if len(ids) != len(set(ids)):
+        raise ValidationError("Option IDs must be unique.")
+    return set(ids)
+
+
+@register(Question.Kind.SINGLE_CHOICE)
+class SingleChoiceGrader(Grader):
+    def validate(self, content: dict[str, Any], answer_key: dict[str, Any]) -> None:
+        ids = _option_ids(content)
+        correct = answer_key.get("correct")
+        if not isinstance(correct, str):
+            raise ValidationError("answer_key.correct must be an option id (str).")
+        if correct not in ids:
+            raise ValidationError(f"answer_key.correct '{correct}' not in options.")
+
+    def is_correct(self, answer_key: dict[str, Any], response: Any) -> bool:
+        return bool(response == answer_key.get("correct"))
+
+
+@register(Question.Kind.MULTI_CHOICE)
+class MultiChoiceGrader(Grader):
+    def validate(self, content: dict[str, Any], answer_key: dict[str, Any]) -> None:
+        ids = _option_ids(content)
+        correct = answer_key.get("correct")
+        if not isinstance(correct, list) or not correct:
+            raise ValidationError("answer_key.correct — a non-empty list of IDs.")
+        unknown = {str(c) for c in correct} - ids
+        if unknown:
+            raise ValidationError(f"Unknown ids in answer_key: {sorted(unknown)}.")
+
+    def is_correct(self, answer_key: dict[str, Any], response: Any) -> bool:
+        if not isinstance(response, list):
+            return False
+        correct = answer_key.get("correct", [])
+        return {str(r) for r in response} == {str(c) for c in correct}
+
+
+@register(Question.Kind.SHORT_ANSWER)
+class ShortAnswerGrader(Grader):
+    def validate(self, content: dict[str, Any], answer_key: dict[str, Any]) -> None:
+        accepted = answer_key.get("accepted")
+        if not isinstance(accepted, list) or not accepted:
+            raise ValidationError("answer_key.accepted — a non-empty list of strings.")
+        if not all(isinstance(a, str) for a in accepted):
+            raise ValidationError("answer_key.accepted contains only strings.")
+
+    def is_correct(self, answer_key: dict[str, Any], response: Any) -> bool:
+        if not isinstance(response, str):
+            return False
+        norm = response.strip().casefold()
+        return any(norm == a.strip().casefold() for a in answer_key.get("accepted", []))
