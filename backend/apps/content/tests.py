@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
+from rest_framework.test import APITestCase
 
 from apps.content import grading
 from apps.content.grading import Grader
@@ -11,6 +12,7 @@ from apps.content.models import (
     TaskGroup,
     Test,
 )
+from apps.users.models import User
 
 
 class SingleChoiceGraderTests(SimpleTestCase):
@@ -58,3 +60,31 @@ class QuestionCleanTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             q.full_clean()
+
+
+class TestApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(username="u", password="p")
+        self.client.force_authenticate(self.user)
+        subject = Subject.objects.create(name="IELTS", slug="ielts")
+        self.test = Test.objects.create(subject=subject, is_published=True)
+        st = SectionType.objects.create(subject=subject, name="Listening")
+        section = Section.objects.create(test=self.test, section_type=st, position=0)
+        tg = TaskGroup.objects.create(section=section, position=0)
+        Question.objects.create(
+            task_group=tg,
+            kind=Question.Kind.SINGLE_CHOICE,
+            prompt="?",
+            content={"options": [{"id": "a", "text": "x"}]},
+            answer_key={"correct": "a"},
+        )
+
+    def test_detail_hides_answer_key(self) -> None:
+        resp = self.client.get(f"/api/v1/tests/{self.test.id}/")
+        self.assertEqual(resp.status_code, 200)
+        q = resp.json()["sections"][0]["task_groups"][0]["questions"][0]
+        self.assertNotIn("answer_key", q)
+
+    def test_requires_auth(self) -> None:
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/v1/tests/").status_code, 403)
