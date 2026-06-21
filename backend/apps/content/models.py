@@ -106,3 +106,11 @@ class Question(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"[{self.get_kind_display()}] {self.prompt[:50]}"
+
+    def clean(self) -> None:
+        super().clean()
+        from .grading import get_grader
+
+        grader = get_grader(self.kind)
+        if grader is not None:
+            grader.validate(self.content, self.answer_key)
