@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APITestCase
 
 from apps.attempts import services
 from apps.attempts.models import Attempt
@@ -62,3 +63,48 @@ class AttemptServiceTests(TestCase):
             services.save_answer(a, self.q, "a")
         a.refresh_from_db()
         self.assertEqual(a.status, Attempt.Status.EXPIRED)
+
+    from rest_framework.test import APITestCase
+
+
+class AttemptApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(username="u", password="p")
+        self.client.force_authenticate(self.user)
+        subject = Subject.objects.create(name="IELTS", slug="ielts")
+        self.test = Test.objects.create(subject=subject, is_published=True)
+        st = SectionType.objects.create(subject=subject, name="Listening")
+        section = Section.objects.create(test=self.test, section_type=st, position=0)
+        tg = TaskGroup.objects.create(section=section, position=0)
+        self.q = Question.objects.create(
+            task_group=tg,
+            kind=Question.Kind.SINGLE_CHOICE,
+            prompt="?",
+            content={"options": [{"id": "a", "text": "x"}]},
+            answer_key={"correct": "a"},
+            points=Decimal("2"),
+        )
+
+    def test_full_flow(self) -> None:
+        r = self.client.post(
+            "/api/v1/attempts/",
+            {"test": self.test.id, "use_default_time": False},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        aid = r.json()["id"]
+        r = self.client.post(
+            f"/api/v1/attempts/{aid}/answers/",
+            {"question": self.q.id, "response": "a"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        r = self.client.post(f"/api/v1/attempts/{aid}/finish/")
+        self.assertEqual(r.json()["status"], "submitted")
+        self.assertEqual(r.json()["score"], "2.00")
+
+    def test_cannot_access_foreign_attempt(self) -> None:
+        other = User.objects.create_user(username="o", password="p")
+        attempt = services.start_attempt(other, self.test, use_default_time=False)
+        r = self.client.get(f"/api/v1/attempts/{attempt.id}/")
+        self.assertEqual(r.status_code, 404)
