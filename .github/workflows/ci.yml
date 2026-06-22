@@ -51,3 +51,6 @@ jobs:
 
       - name: Tests
         run: uv run python manage.py test
+
+      - name: Validate OpenAPI schema
+        run: uv run python manage.py spectacular --validate --fail-on-warn > /dev/null
