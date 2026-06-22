@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.db.models import QuerySet
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -26,11 +27,14 @@ class AttemptViewSet(
     serializer_class = AttemptSerializer
 
     def get_queryset(self) -> QuerySet[Attempt]:
+        if getattr(self, "swagger_fake_view", False):
+            return Attempt.objects.none()
         assert isinstance(self.request.user, User)
         return Attempt.objects.filter(user=self.request.user).prefetch_related(
             "answers"
         )
 
+    @extend_schema(request=StartAttemptSerializer, responses=AttemptSerializer)
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         ser = StartAttemptSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -43,6 +47,7 @@ class AttemptViewSet(
         )
         return Response(AttemptSerializer(attempt).data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(request=SaveAnswerSerializer, responses=AttemptSerializer)
     @action(detail=True, methods=["post"])
     def answers(self, request: Request, pk: str | None = None) -> Response:
         attempt = self.get_object()
@@ -59,6 +64,7 @@ class AttemptViewSet(
         attempt.refresh_from_db()
         return Response(AttemptSerializer(attempt).data)
 
+    @extend_schema(request=None, responses=AttemptSerializer)
     @action(detail=True, methods=["post"])
     def finish(self, request: Request, pk: str | None = None) -> Response:
         attempt = self.get_object()

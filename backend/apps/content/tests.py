@@ -88,3 +88,8 @@ class TestApiTests(APITestCase):
     def test_requires_auth(self) -> None:
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/v1/tests/").status_code, 401)
+
+
+class SchemaTests(APITestCase):
+    def test_schema_available(self) -> None:
+        self.assertEqual(self.client.get("/api/v1/schema/").status_code, 200)
