@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { useRouter, RouterLink } from 'vue-router'
+import { LogOut } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
+import { Button } from '@/components/ui/button'
 
 const auth = useAuthStore()
 const router = useRouter()
-function logout() { auth.logout(); router.push({ name: 'login' }) }
+function logout() {
+  auth.logout()
+  router.push({ name: 'login' })
+}
 </script>
 
 <template>
@@ -23,14 +28,27 @@ function logout() { auth.logout(); router.push({ name: 'login' }) }
         <RouterLink to="/" class="hover:text-primary">Home</RouterLink>
       </nav>
 
-      <button class="flex items-center gap-3 cursor-pointer" @click="logout">
+      <div class="flex items-center gap-3">
         <div class="text-right leading-tight">
           <div class="text-sm font-semibold text-foreground">Sergei Dariukhin</div>
           <div class="text-xs text-muted-foreground">Student</div>
         </div>
-        <div class="w-10 h-10 rounded-full bg-accent flex items-center
-                    justify-center font-bold text-sm text-primary">SD</div>
-      </button>
+        <div
+          class="w-10 h-10 rounded-full bg-accent flex items-center justify-center font-bold text-sm text-primary"
+        >
+          SD
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-muted-foreground hover:text-destructive"
+          aria-label="Log out"
+          title="Log out"
+          @click="logout"
+        >
+          <LogOut />
+        </Button>
+      </div>
     </div>
   </header>
 </template>

@@ -4,9 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Card, CardHeader, CardTitle, CardDescription, CardContent,
-} from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 
 const username = ref('')
 const password = ref('')
@@ -49,13 +47,22 @@ async function submit() {
         <form class="flex flex-col gap-4" @submit.prevent="submit">
           <div class="flex flex-col gap-1.5">
             <label for="username" class="text-sm font-medium">Username</label>
-            <Input id="username" v-model="username" placeholder="Your username"
-                   autocomplete="username" />
+            <Input
+              id="username"
+              v-model="username"
+              placeholder="Your username"
+              autocomplete="username"
+            />
           </div>
           <div class="flex flex-col gap-1.5">
             <label for="password" class="text-sm font-medium">Password</label>
-            <Input id="password" v-model="password" type="password"
-                   placeholder="••••••••" autocomplete="current-password" />
+            <Input
+              id="password"
+              v-model="password"
+              type="password"
+              placeholder="••••••••"
+              autocomplete="current-password"
+            />
           </div>
           <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
           <Button type="submit" class="w-full mt-1" :disabled="loading">
