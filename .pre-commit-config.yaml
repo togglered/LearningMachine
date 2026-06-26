@@ -38,3 +38,24 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npx eslint . --fix'
+        language: system
+        files: ^frontend/.*\.(ts|mts|tsx|vue)$
+        pass_filenames: false
+
+      - id: vue-tsc
+        name: vue-tsc (frontend)
+        entry: bash -c 'cd frontend && npx vue-tsc --noEmit -p tsconfig.app.json'
+        language: system
+        files: ^frontend/.*\.(ts|mts|tsx|vue)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && npx prettier --write src'
+        language: system
+        files: ^frontend/.*\.(ts|mts|tsx|vue|js|json|css)$
+        pass_filenames: false
