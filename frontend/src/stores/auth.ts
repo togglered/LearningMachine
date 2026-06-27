@@ -25,6 +25,20 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)
     },
+    async refreshAccess(): Promise<string | null> {
+      if (!this.refresh) return null
+      try {
+        const { data } = await axios.post<{ access: string }>(
+          `${import.meta.env.VITE_API_URL}/auth/token/refresh/`,
+          { refresh: this.refresh },
+        )
+        this.access = data.access
+        localStorage.setItem('access', data.access)
+        return data.access
+      } catch {
+        return null
+      }
+    },
     logout() {
       this.access = null
       this.refresh = null

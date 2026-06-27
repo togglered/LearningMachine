@@ -8,6 +8,7 @@ export default defineConfigWithVueTs(
   globalIgnores([
     '**/dist/**',
     '**/node_modules/**',
+    '**/.vite/**',
     'src/components/ui/**',
   ]),
   pluginVue.configs['flat/essential'],
