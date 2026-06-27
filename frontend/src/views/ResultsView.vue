@@ -46,6 +46,18 @@ function yourAnswer(q: Question, a?: Answer) {
     return a.response
       .map((id) => q.content.options?.find((o) => o.id === id)?.text ?? id)
       .join(', ')
+  if (q.kind === 'gap_fill' && a.response && typeof a.response === 'object') {
+    return Object.values(a.response as Record<string, string>).join(', ')
+  }
+  if (q.kind === 'matching' && a.response && typeof a.response === 'object') {
+    const r = a.response as Record<string, string>
+    return (q.content.left ?? [])
+      .map((l) => {
+        const rightText = (q.content.right ?? []).find((x) => x.id === r[l.id])?.text ?? '—'
+        return `${l.text} → ${rightText}`
+      })
+      .join('; ')
+  }
   return String(a.response)
 }
 async function retake() {
@@ -116,7 +128,7 @@ async function retake() {
       </div>
 
       <div class="flex gap-3 flex-wrap">
-        <Button @click="retake">Пройти снова</Button>
+        <Button @click="retake">Try again</Button>
         <Button variant="secondary" @click="router.push({ name: 'tests' })">To the Tests</Button>
       </div>
     </template>

@@ -93,3 +93,65 @@ class TestApiTests(APITestCase):
 class SchemaTests(APITestCase):
     def test_schema_available(self) -> None:
         self.assertEqual(self.client.get("/api/v1/schema/").status_code, 200)
+
+
+class GapFillGraderTests(SimpleTestCase):
+    def setUp(self) -> None:
+        grader = grading.get_grader(Question.Kind.GAP_FILL)
+        assert grader is not None
+        self.grader: Grader = grader
+        self.content = {
+            "text": "The {{1}} fox over the {{2}} dog",
+            "gaps": [{"id": "1"}, {"id": "2"}],
+        }
+        self.answer_key = {"answers": {"1": ["quick", "fast"], "2": ["lazy"]}}
+
+    def test_valid_passes(self) -> None:
+        self.grader.validate(self.content, self.answer_key)
+
+    def test_answer_keys_must_match_gaps(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate(self.content, {"answers": {"1": ["quick"]}})
+
+    def test_is_correct(self) -> None:
+        self.assertTrue(
+            self.grader.is_correct(self.answer_key, {"1": "quick", "2": "lazy"})
+        )
+        self.assertTrue(
+            self.grader.is_correct(self.answer_key, {"1": " FAST ", "2": "lazy"})
+        )
+        self.assertFalse(
+            self.grader.is_correct(self.answer_key, {"1": "slow", "2": "lazy"})
+        )
+        self.assertFalse(self.grader.is_correct(self.answer_key, {"1": "quick"}))
+
+
+class MatchingGraderTests(SimpleTestCase):
+    def setUp(self) -> None:
+        grader = grading.get_grader(Question.Kind.MATCHING)
+        assert grader is not None
+        self.grader: Grader = grader
+        self.content = {
+            "left": [{"id": "l1", "text": "Dog"}, {"id": "l2", "text": "Cat"}],
+            "right": [{"id": "r1", "text": "Barks"}, {"id": "r2", "text": "Meows"}],
+        }
+        self.answer_key = {"pairs": {"l1": "r1", "l2": "r2"}}
+
+    def test_valid_passes(self) -> None:
+        self.grader.validate(self.content, self.answer_key)
+
+    def test_pairs_must_cover_left(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate(self.content, {"pairs": {"l1": "r1"}})
+
+    def test_unknown_right_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate(self.content, {"pairs": {"l1": "rX", "l2": "r2"}})
+
+    def test_is_correct(self) -> None:
+        self.assertTrue(
+            self.grader.is_correct(self.answer_key, {"l1": "r1", "l2": "r2"})
+        )
+        self.assertFalse(
+            self.grader.is_correct(self.answer_key, {"l1": "r2", "l2": "r1"})
+        )
