@@ -43,6 +43,29 @@ class MultiChoiceGraderTests(SimpleTestCase):
     def test_order_independent(self) -> None:
         self.assertTrue(self.grader.is_correct({"correct": ["a", "b"]}, ["b", "a"]))
 
+    def test_valid_passes(self) -> None:
+        content = {"options": [{"id": "a", "text": "x"}, {"id": "b", "text": "y"}]}
+        self.grader.validate(content, {"correct": ["a", "b"]})
+
+    def test_correct_must_be_non_empty_list(self) -> None:
+        content = {"options": [{"id": "a", "text": "x"}]}
+        with self.assertRaises(ValidationError):
+            self.grader.validate(content, {"correct": []})
+        with self.assertRaises(ValidationError):
+            self.grader.validate(content, {"correct": "a"})
+
+    def test_unknown_ids_rejected(self) -> None:
+        content = {"options": [{"id": "a", "text": "x"}]}
+        with self.assertRaises(ValidationError):
+            self.grader.validate(content, {"correct": ["a", "z"]})
+
+    def test_is_correct_negatives(self) -> None:
+        key = {"correct": ["a", "b"]}
+        self.assertFalse(self.grader.is_correct(key, ["a"]))
+        self.assertFalse(self.grader.is_correct(key, ["a", "b", "c"]))
+        self.assertFalse(self.grader.is_correct(key, "a"))
+        self.assertFalse(self.grader.is_correct(key, []))
+
 
 class QuestionCleanTests(TestCase):
     def test_clean_rejects_bad_answer_key(self) -> None:
@@ -155,3 +178,72 @@ class MatchingGraderTests(SimpleTestCase):
         self.assertFalse(
             self.grader.is_correct(self.answer_key, {"l1": "r2", "l2": "r1"})
         )
+
+
+class ShortAnswerGraderTests(SimpleTestCase):
+    def setUp(self) -> None:
+        grader = grading.get_grader(Question.Kind.SHORT_ANSWER)
+        assert grader is not None
+        self.grader: Grader = grader
+        self.answer_key = {"accepted": ["colour", "color"]}
+
+    def test_valid_passes(self) -> None:
+        self.grader.validate({}, self.answer_key)
+
+    def test_accepted_must_be_non_empty_list_of_str(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate({}, {"accepted": []})
+        with self.assertRaises(ValidationError):
+            self.grader.validate({}, {"accepted": [1, 2]})
+
+    def test_is_correct_normalizes(self) -> None:
+        self.assertTrue(self.grader.is_correct(self.answer_key, "colour"))
+        self.assertTrue(self.grader.is_correct(self.answer_key, "  COLOR "))
+        self.assertFalse(self.grader.is_correct(self.answer_key, "colur"))
+        self.assertFalse(self.grader.is_correct(self.answer_key, 123))
+
+
+class EssayGraderTests(SimpleTestCase):
+    def setUp(self) -> None:
+        grader = grading.get_grader(Question.Kind.ESSAY)
+        assert grader is not None
+        self.grader: Grader = grader
+        self.content = {
+            "criteria": [
+                {"id": "task", "text": "Task response", "points": 9},
+                {"id": "coherence", "text": "Coherence", "points": 9},
+            ]
+        }
+
+    def test_valid_passes(self) -> None:
+        self.grader.validate(self.content, {})
+
+    def test_criteria_required(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate({"criteria": []}, {})
+
+    def test_missing_fields_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate({"criteria": [{"id": "a", "text": "x"}]}, {})
+
+    def test_points_must_be_positive(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate(
+                {"criteria": [{"id": "a", "text": "x", "points": 0}]}, {}
+            )
+
+    def test_duplicate_ids_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.grader.validate(
+                {
+                    "criteria": [
+                        {"id": "a", "text": "x", "points": 1},
+                        {"id": "a", "text": "y", "points": 1},
+                    ]
+                },
+                {},
+            )
+
+    def test_not_auto_gradable(self) -> None:
+        self.assertFalse(self.grader.auto_gradable)
+        self.assertFalse(self.grader.is_correct({}, "any essay text"))
