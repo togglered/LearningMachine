@@ -108,3 +108,34 @@ class AttemptApiTests(APITestCase):
         attempt = services.start_attempt(other, self.test, use_default_time=False)
         r = self.client.get(f"/api/v1/attempts/{attempt.id}/")
         self.assertEqual(r.status_code, 404)
+
+    def test_cannot_answer_question_from_other_test(self) -> None:
+        other_test = Test.objects.create(subject=self.test.subject, is_published=True)
+        other_section = Section.objects.create(
+            test=other_test,
+            section_type=self.q.task_group.section.section_type,
+            position=0,
+        )
+        other_tg = TaskGroup.objects.create(section=other_section, position=0)
+        foreign_q = Question.objects.create(
+            task_group=other_tg,
+            kind=Question.Kind.SINGLE_CHOICE,
+            prompt="?",
+            content={"options": [{"id": "a", "text": "x"}]},
+            answer_key={"correct": "a"},
+            points=Decimal("1"),
+        )
+
+        r = self.client.post(
+            "/api/v1/attempts/",
+            {"test": self.test.id, "use_default_time": False},
+            format="json",
+        )
+        aid = r.json()["id"]
+
+        r = self.client.post(
+            f"/api/v1/attempts/{aid}/answers/",
+            {"question": foreign_q.id, "response": "a"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
