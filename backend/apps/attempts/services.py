@@ -13,6 +13,11 @@ from apps.users.models import User
 from .models import Answer, Attempt
 
 
+def _ensure_question_in_attempt(attempt: Attempt, question: Question) -> None:
+    if question.task_group.section.test_id != attempt.test_id:
+        raise ValueError("Question does not belong to this attempt.")
+
+
 def start_attempt(user: User, test: Test, *, use_default_time: bool) -> Attempt:
     return Attempt.objects.create(
         user=user,
@@ -22,6 +27,7 @@ def start_attempt(user: User, test: Test, *, use_default_time: bool) -> Attempt:
 
 
 def save_answer(attempt: Attempt, question: Question, response: Any) -> Answer:
+    _ensure_question_in_attempt(attempt, question)
     if attempt.status != Attempt.Status.IN_PROGRESS:
         raise ValueError("Attempt is not in progress.")
     if attempt.is_expired:
