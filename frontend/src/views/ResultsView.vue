@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getTest, flattenQuestions, type Question } from '@/api/tests'
 import { Button } from '@/components/ui/button'
-import { getAttempt, startAttempt, type Attempt, type Answer } from '@/api/attempts'
+import { getAttempt, selfAssess, startAttempt, type Attempt, type Answer } from '@/api/attempts'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,12 +13,22 @@ const loading = ref(true)
 const error = ref('')
 const attempt = ref<Attempt | null>(null)
 const questions = ref<Question[]>([])
+const essayScores = ref<Record<number, Record<string, number>>>({})
+const totalPoints = computed(() => questions.value.reduce((s, q) => s + Number(q.points), 0))
+const earned = computed(() => Number(attempt.value?.score ?? 0))
 
 onMounted(async () => {
   try {
     const att = await getAttempt(attemptId)
     attempt.value = att
     questions.value = flattenQuestions(await getTest(att.test))
+    for (const q of questions.value) {
+      if (q.kind === 'essay') {
+        essayScores.value[q.id] = Object.fromEntries(
+          (q.content.criteria ?? []).map((c) => [c.id, 0]),
+        )
+      }
+    }
   } catch {
     error.value = 'Unable to load results'
   } finally {
@@ -35,7 +45,7 @@ const correctCount = computed(
 )
 const wrongCount = computed(() => total.value - correctCount.value)
 const scorePct = computed(() =>
-  total.value ? Math.round((correctCount.value / total.value) * 100) : 0,
+  totalPoints.value ? Math.round((earned.value / totalPoints.value) * 100) : 0,
 )
 
 function yourAnswer(q: Question, a?: Answer) {
@@ -46,12 +56,41 @@ function yourAnswer(q: Question, a?: Answer) {
     return a.response
       .map((id) => q.content.options?.find((o) => o.id === id)?.text ?? id)
       .join(', ')
+  if (q.kind === 'gap_fill' && a.response && typeof a.response === 'object') {
+    return Object.values(a.response as Record<string, string>).join(', ')
+  }
+  if (q.kind === 'matching' && a.response && typeof a.response === 'object') {
+    const r = a.response as Record<string, string>
+    return (q.content.left ?? [])
+      .map((l) => {
+        const rightText = (q.content.right ?? []).find((x) => x.id === r[l.id])?.text ?? '—'
+        return `${l.text} → ${rightText}`
+      })
+      .join('; ')
+  }
   return String(a.response)
 }
 async function retake() {
   if (!attempt.value) return
   const att = await startAttempt(attempt.value.test)
   router.push({ name: 'test-run', params: { id: att.id } })
+}
+function essayText(q: Question): string {
+  const r = answerByQ.value.get(q.id)?.response
+  return typeof r === 'string' && r ? r : '(blank)'
+}
+async function assessEssay(q: Question) {
+  attempt.value = await selfAssess(attemptId, q.id, essayScores.value[q.id])
+}
+function essayMax(q: Question): number {
+  return (q.content.criteria ?? []).reduce((s, c) => s + c.points, 0)
+}
+function essayVerdict(q: Question): 'full' | 'partial' | 'zero' | null {
+  const a = answerByQ.value.get(q.id)
+  if (a?.awarded_points == null) return null
+  const pts = Number(a.awarded_points)
+  if (pts <= 0) return 'zero'
+  return pts >= essayMax(q) ? 'full' : 'partial'
 }
 </script>
 
@@ -94,29 +133,81 @@ async function retake() {
         <div class="text-lg font-bold mb-4.5">Analysis of the Answers</div>
         <div class="flex flex-col gap-4">
           <div v-for="q in questions" :key="q.id" class="border-b pb-4 last:border-0 last:pb-0">
-            <div class="flex items-start justify-between gap-3.5 mb-2">
-              <span class="text-[15px] font-semibold leading-snug">{{ q.prompt }}</span>
-              <span
-                class="flex-none text-xs font-semibold px-2.5 py-[3px] rounded-full"
-                :class="
-                  answerByQ.get(q.id)?.is_correct
-                    ? 'bg-success-muted text-success'
-                    : 'bg-destructive-muted text-destructive'
-                "
-              >
-                {{ answerByQ.get(q.id)?.is_correct ? 'Correct' : 'Incorrect' }}
-              </span>
-            </div>
-            <div class="text-sm text-[#5d7689]">
-              Your response:
-              <span class="font-semibold">{{ yourAnswer(q, answerByQ.get(q.id)) }}</span>
-            </div>
+            <template v-if="q.kind === 'essay'">
+              <div class="text-[15px] font-semibold leading-snug mb-2">{{ q.prompt }}</div>
+              <div class="text-sm text-[#5d7689] whitespace-pre-wrap bg-muted rounded-lg p-3 mb-3">
+                {{ essayText(q) }}
+              </div>
+              <div class="flex flex-col gap-2">
+                <div
+                  v-for="c in q.content.criteria ?? []"
+                  :key="c.id"
+                  class="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span>{{ c.text }}</span>
+                  <select
+                    v-model.number="essayScores[q.id][c.id]"
+                    class="px-2 py-1 border-[1.5px] border-border rounded-md bg-card outline-none focus:border-primary"
+                  >
+                    <option v-for="n in c.points + 1" :key="n - 1" :value="n - 1">
+                      {{ n - 1 }} / {{ c.points }}
+                    </option>
+                  </select>
+                </div>
+                <div class="flex items-center gap-3 mt-1">
+                  <Button size="sm" @click="assessEssay(q)">Save rating</Button>
+                  <span
+                    v-if="answerByQ.get(q.id)?.awarded_points != null"
+                    class="text-sm font-semibold text-success"
+                  >
+                    Self assessment: {{ answerByQ.get(q.id)?.awarded_points }} points
+                  </span>
+                  <span
+                    v-if="essayVerdict(q)"
+                    class="text-xs font-semibold px-2.5 py-[3px] rounded-full"
+                    :class="{
+                      'bg-success-muted text-success': essayVerdict(q) === 'full',
+                      'bg-warning-muted text-warning': essayVerdict(q) === 'partial',
+                      'bg-destructive-muted text-destructive': essayVerdict(q) === 'zero',
+                    }"
+                  >
+                    {{
+                      {
+                        full: 'Absolutely Correct',
+                        partial: 'Pertically Correct',
+                        zero: 'Absolutely Incorrect',
+                      }[essayVerdict(q)!]
+                    }}
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="flex items-start justify-between gap-3.5 mb-2">
+                <span class="text-[15px] font-semibold leading-snug">{{ q.prompt }}</span>
+                <span
+                  class="flex-none text-xs font-semibold px-2.5 py-[3px] rounded-full"
+                  :class="
+                    answerByQ.get(q.id)?.is_correct
+                      ? 'bg-success-muted text-success'
+                      : 'bg-destructive-muted text-destructive'
+                  "
+                >
+                  {{ answerByQ.get(q.id)?.is_correct ? 'Correct' : 'Incorrect' }}
+                </span>
+              </div>
+              <div class="text-sm text-[#5d7689]">
+                Your response:
+                <span class="font-semibold">{{ yourAnswer(q, answerByQ.get(q.id)) }}</span>
+              </div>
+            </template>
           </div>
         </div>
       </div>
 
       <div class="flex gap-3 flex-wrap">
-        <Button @click="retake">Пройти снова</Button>
+        <Button @click="retake">Try again</Button>
         <Button variant="secondary" @click="router.push({ name: 'tests' })">To the Tests</Button>
       </div>
     </template>

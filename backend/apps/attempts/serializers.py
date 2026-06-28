@@ -42,3 +42,10 @@ class AttemptSerializer(serializers.ModelSerializer[Attempt]):
             "score",
             "answers",
         ]
+
+
+class SelfAssessSerializer(serializers.Serializer[Any]):
+    question: serializers.PrimaryKeyRelatedField[Question] = (
+        serializers.PrimaryKeyRelatedField(queryset=Question.objects.all())
+    )
+    scores = serializers.DictField(child=serializers.FloatField())

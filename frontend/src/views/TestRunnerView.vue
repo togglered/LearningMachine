@@ -27,12 +27,14 @@ const pendingTimers = new Map<number, number>()
 const letters = ['A', 'B', 'C', 'D', 'E', 'F']
 
 const total = computed(() => questions.value.length)
+function hasAnswer(r: unknown): boolean {
+  if (r === undefined || r === null || r === '') return false
+  if (Array.isArray(r)) return r.length > 0
+  if (typeof r === 'object') return Object.keys(r).length > 0
+  return true
+}
 const answered = computed(
-  () =>
-    questions.value.filter((q) => {
-      const r = responses.value[q.id]
-      return r !== undefined && r !== '' && !(Array.isArray(r) && r.length === 0)
-    }).length,
+  () => questions.value.filter((q) => hasAnswer(responses.value[q.id])).length,
 )
 const deadline = computed(() => {
   if (!attempt.value?.time_limit) return null
@@ -79,6 +81,36 @@ async function flushPending() {
 function selectSingle(qid: number, optId: string) {
   responses.value[qid] = optId
   saveResponse(qid, optId)
+}
+type Segment = { type: 'text'; value: string } | { type: 'gap'; id: string }
+function gapSegments(q: Question): Segment[] {
+  const text = q.content.text ?? ''
+  const out: Segment[] = []
+  let last = 0
+  for (const m of text.matchAll(/\{\{(\w+)\}\}/g)) {
+    const idx = m.index
+    if (idx > last) out.push({ type: 'text', value: text.slice(last, idx) })
+    out.push({ type: 'gap', id: m[1] })
+    last = idx + m[0].length
+  }
+  if (last < text.length) out.push({ type: 'text', value: text.slice(last) })
+  return out
+}
+function gapVal(qid: number, gapId: string): string {
+  return ((responses.value[qid] as Record<string, string>) ?? {})[gapId] ?? ''
+}
+function setGap(qid: number, gapId: string, val: string) {
+  const cur = (responses.value[qid] as Record<string, string>) ?? {}
+  responses.value[qid] = { ...cur, [gapId]: val }
+  scheduleTextSave(qid)
+}
+function matchVal(qid: number, leftId: string): string {
+  return ((responses.value[qid] as Record<string, string>) ?? {})[leftId] ?? ''
+}
+function setMatch(qid: number, leftId: string, rightId: string) {
+  const cur = (responses.value[qid] as Record<string, string>) ?? {}
+  responses.value[qid] = { ...cur, [leftId]: rightId }
+  saveResponse(qid, responses.value[qid])
 }
 function isSingle(qid: number, optId: string) {
   return responses.value[qid] === optId
@@ -218,9 +250,42 @@ onUnmounted(() => {
             @update:model-value="onText(q.id, String($event))"
           />
 
-          <div v-else class="text-muted-foreground">
-            The “{{ q.kind }}” type is not yet supported.
+          <div v-else-if="q.kind === 'gap_fill'" class="text-base leading-loose">
+            <template v-for="(seg, si) in gapSegments(q)" :key="si">
+              <span v-if="seg.type === 'text'">{{ seg.value }}</span>
+              <input
+                v-else
+                :value="gapVal(q.id, seg.id)"
+                class="mx-1 inline-block w-32 px-2 py-1 border-[1.5px] border-border rounded-md bg-card outline-none focus:border-primary"
+                @input="setGap(q.id, seg.id, ($event.target as HTMLInputElement).value)"
+              />
+            </template>
           </div>
+
+          <div v-else-if="q.kind === 'matching'" class="flex flex-col gap-3">
+            <div v-for="l in q.content.left ?? []" :key="l.id" class="flex items-center gap-3">
+              <span class="flex-1 font-medium">{{ l.text }}</span>
+              <select
+                :value="matchVal(q.id, l.id)"
+                class="flex-1 px-3 py-2 border-[1.5px] border-border rounded-lg bg-card outline-none focus:border-primary"
+                @change="setMatch(q.id, l.id, ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="" disabled>— choose —</option>
+                <option v-for="r in q.content.right ?? []" :key="r.id" :value="r.id">
+                  {{ r.text }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <textarea
+            v-else-if="q.kind === 'essay'"
+            :value="(responses[q.id] as string) ?? ''"
+            rows="8"
+            placeholder="Your essay…"
+            class="w-full px-4 py-3 border-[1.5px] border-border rounded-xl bg-card outline-none focus:border-primary resize-y"
+            @input="onText(q.id, ($event.target as HTMLTextAreaElement).value)"
+          />
         </div>
       </div>
 

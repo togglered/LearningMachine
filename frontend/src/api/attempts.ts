@@ -32,3 +32,6 @@ export const saveAnswer = (attemptId: number, question: number, response: unknow
 
 export const finishAttempt = (attemptId: number) =>
   api.post<Attempt>(`/attempts/${attemptId}/finish/`).then((r) => r.data)
+
+export const selfAssess = (attemptId: number, question: number, scores: Record<string, number>) =>
+  api.post<Attempt>(`/attempts/${attemptId}/self-assess/`, { question, scores }).then((r) => r.data)

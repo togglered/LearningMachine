@@ -17,7 +17,14 @@ export interface Question {
   id: number
   kind: QuestionKind
   prompt: string
-  content: { options?: Option[] } & Record<string, unknown>
+  content: {
+    options?: Option[] // single/multi
+    text?: string // gap_fill: "...{{1}}...{{2}}..."
+    gaps?: { id: string }[] // gap_fill
+    left?: Option[] // matching
+    right?: Option[] // matching
+    criteria?: { id: string; text: string; points: number }[] // essay
+  } & Record<string, unknown>
   points: string
   position: number
 }
