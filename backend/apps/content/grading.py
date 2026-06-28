@@ -180,3 +180,25 @@ class MatchingGrader(Grader):
         return {str(k): str(v) for k, v in response.items()} == {
             str(k): str(v) for k, v in pairs.items()
         }
+
+
+@register(Question.Kind.ESSAY)
+class EssayGrader(Grader):
+    auto_gradable = False
+
+    def validate(self, content: dict[str, Any], answer_key: dict[str, Any]) -> None:
+        criteria = content.get("criteria")
+        if not isinstance(criteria, list) or not criteria:
+            raise ValidationError("content.criteria must be a non-empty list.")
+        ids: list[str] = []
+        for c in criteria:
+            if not isinstance(c, dict) or {"id", "text", "points"} - c.keys():
+                raise ValidationError("Each criterion needs id, text, points.")
+            if not isinstance(c["points"], int | float) or c["points"] <= 0:
+                raise ValidationError("Criterion points must be a positive number.")
+            ids.append(str(c["id"]))
+        if len(ids) != len(set(ids)):
+            raise ValidationError("Criterion IDs must be unique.")
+
+    def is_correct(self, answer_key: dict[str, Any], response: Any) -> bool:
+        return False

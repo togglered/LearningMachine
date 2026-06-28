@@ -23,6 +23,7 @@ export interface Question {
     gaps?: { id: string }[] // gap_fill
     left?: Option[] // matching
     right?: Option[] // matching
+    criteria?: { id: string; text: string; points: number }[] // essay
   } & Record<string, unknown>
   points: string
   position: number

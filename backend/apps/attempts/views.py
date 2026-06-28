@@ -15,6 +15,7 @@ from .models import Attempt
 from .serializers import (
     AttemptSerializer,
     SaveAnswerSerializer,
+    SelfAssessSerializer,
     StartAttemptSerializer,
 )
 
@@ -69,4 +70,21 @@ class AttemptViewSet(
     def finish(self, request: Request, pk: str | None = None) -> Response:
         attempt = self.get_object()
         services.finish_attempt(attempt)
+        return Response(AttemptSerializer(attempt).data)
+
+    @extend_schema(request=SelfAssessSerializer, responses=AttemptSerializer)
+    @action(detail=True, methods=["post"], url_path="self-assess")
+    def self_assess(self, request: Request, pk: str | None = None) -> Response:
+        attempt = self.get_object()
+        ser = SelfAssessSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            services.self_assess(
+                attempt,
+                ser.validated_data["question"],
+                ser.validated_data["scores"],
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        attempt.refresh_from_db()
         return Response(AttemptSerializer(attempt).data)

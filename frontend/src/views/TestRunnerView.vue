@@ -278,9 +278,14 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-else class="text-muted-foreground">
-            The “{{ q.kind }}” type is not yet supported.
-          </div>
+          <textarea
+            v-else-if="q.kind === 'essay'"
+            :value="(responses[q.id] as string) ?? ''"
+            rows="8"
+            placeholder="Your essay…"
+            class="w-full px-4 py-3 border-[1.5px] border-border rounded-xl bg-card outline-none focus:border-primary resize-y"
+            @input="onText(q.id, ($event.target as HTMLTextAreaElement).value)"
+          />
         </div>
       </div>
 
